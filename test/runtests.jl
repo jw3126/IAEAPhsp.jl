@@ -1,5 +1,6 @@
 using IAEAPhsp
 using Base.Test
+using IAEAPhsp.Raw
 
 # write your own tests here
-@test 1 == 2
+include("test_raw.jl")
