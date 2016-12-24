@@ -1,5 +1,4 @@
-export Source, Particle, get_particle
-
+export Source, Particle, get_particle, ParticleType
 
 immutable Source
     header_path::String
@@ -19,8 +18,10 @@ end
 Base.length(s::Source) = value(s.left_particles)
 destroy(s::Source) = destroy_source(s.id)
 
+@enum ParticleType photon=1 electron=2 positron=3 neutron=4 proton=5
+
 immutable Particle
-    typ::IAEA_I32
+    typ::ParticleType
     E::IAEA_Float
     wt::IAEA_Float
     x::IAEA_Float
@@ -33,10 +34,17 @@ immutable Particle
     extra_ints::Vector{IAEA_I32}
 end
 
+for pt in instances(ParticleType)
+    fname = Symbol("is", pt)
+    @eval $fname(x::Particle) = x.typ == pt
+    eval(Expr(:export, fname))
+end
+
+
 function get_particle(s::Source)
     typ, E, wt, x, y, z, u, v, w, extra_floats, extra_ints = get_particle(s.id)
     s.left_particles.x -= 1
-    Particle(typ, E, wt, x, y, z, u, v, w, extra_floats, extra_ints)
+    Particle(ParticleType(typ), E, wt, x, y, z, u, v, w, extra_floats, extra_ints)
 end
 
 import Base: start, next, done
