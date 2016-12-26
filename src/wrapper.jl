@@ -2,6 +2,28 @@ export Source, Particle, get_particle, ParticleType, readparticles
 
 import Base: RefValue
 
+function new_source(header_path::String, id::Ref{IAEA_I32}, access=1)
+    header_file = header_path.data |> pointer |> Cstring #Ref(header_path.data)
+    result = Ref{IAEA_I32}()
+    hf_length = header_path.data |> sizeof |> Cint
+    iaea_new_source(id, header_path, Ref(IAEA_I32(access)), result, hf_length)
+    value(result)
+end
+function get_extra_numbers(id)
+    nf = Ref{IAEA_I32}()
+    ni = Ref{IAEA_I32}()
+    iaea_get_extra_numbers(id,nf, ni)
+    Int(value(nf)), Int(value(ni))  # NTuple{N,...} wants Int and not Int32
+end
+function get_max_particles(id, _type::Ref)
+    n_particle = Ref{IAEA_I64}()
+    iaea_get_max_particles(id, _type, n_particle)
+    value(n_particle)
+end
+
+# talking to iaea library is via C functions, whose arguments
+# are lots of pointers to numbers. Allocating them for each ccall
+# is expensive, hence we allocate memory once with this Allocator type
 immutable Allocator{Nf, Ni}
     n_stat::RefValue{IAEA_I32}
     _type::RefValue{IAEA_I32}
@@ -32,13 +54,6 @@ immutable Allocator{Nf, Ni}
     end
 end
 
-function new_source(header_path::String, id::Ref{IAEA_I32}, access=1)
-    header_file = header_path.data |> pointer |> Cstring #Ref(header_path.data)
-    result = Ref{IAEA_I32}()
-    hf_length = header_path.data |> sizeof |> Cint
-    iaea_new_source(id, header_path, Ref(IAEA_I32(access)), result, hf_length)
-    value(result)
-end
 
 immutable Source{Nf, Ni}
     header_path::String
@@ -48,18 +63,6 @@ immutable Source{Nf, Ni}
     left_particles::RefValue{Int64}
     allocator::Allocator{Nf, Ni}
 
-end
-
-function get_extra_numbers(id)
-    nf = Ref{IAEA_I32}()
-    ni = Ref{IAEA_I32}()
-    iaea_get_extra_numbers(id,nf, ni)
-    Int(value(nf)), Int(value(ni))  # NTuple{N,...} wants Int and not Int32
-end
-function get_max_particles(id, _type::Ref)
-    n_particle = Ref{IAEA_I64}()
-    iaea_get_max_particles(id, _type, n_particle)
-    value(n_particle)
 end
 
 function Source(header_path, access=1)
@@ -74,7 +77,6 @@ function Source(header_path, access=1)
 end
 
 destroy(s::Source) = destroy_source(s.id)
-Base.length(s::Source) = value(s.left_particles)
 
 @enum ParticleType photon=1 electron=2 positron=3 neutron=4 proton=5
 
@@ -109,7 +111,7 @@ function allocate_next_particle!(s::Source)
     a.extra_ints)
     s.left_particles.x -= IAEA_I32(1)
 end
-function get_particle{Nf, Ni}(a::Allocator{Nf, Ni})
+function _get_particle{Nf, Ni}(a::Allocator{Nf, Ni})
     Particle{Nf, Ni}(
     a._type |> value |> ParticleType,
     a.E |> value,
@@ -126,13 +128,15 @@ function get_particle{Nf, Ni}(a::Allocator{Nf, Ni})
 end
 function get_particle(s::Source)
     allocate_next_particle!(s)
-    get_particle(s.allocator)
+    _get_particle(s.allocator)
 end
 
-import Base: start, next, done
+import Base: start, next, done, length, eltype
 start(s::Source) = nothing
 next(s::Source, state::Void) = get_particle(s), nothing
 done(s::Source, state::Void) = length(s) <= 0
+length(s::Source) = value(s.left_particles)
+eltype{Nf, Ni}(s::Source{Nf, Ni}) = Particle{Nf, Ni}
 
 function destroy_source(s::Source)
     result = Ref{IAEA_I32}()
@@ -140,14 +144,19 @@ function destroy_source(s::Source)
     value(result)
 end
 
-@noinline function readparticles{Nf, Ni}(s::Source{Nf, Ni})
-    ret = Particle{Nf, Ni}[]
-    sizehint!(ret, s.left_particles.x)
+# @noinline readparticles(s::Source) = collect(s)
+@noinline function readparticles(s::Source)
+    # this is much faster then collect in 0.5, not sure why
+    ret = eltype(s)[]
+    sizehint!(ret, length(s))
     for p in s
         push!(ret, p)
     end
     ret
 end
+
+
+
 
 function readparticles(path)
     s = Source(path)

@@ -1,3 +1,4 @@
+__precompile__(true)
 module IAEAPhsp
 
 include("constants.jl")
