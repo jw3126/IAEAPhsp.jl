@@ -1,6 +1,7 @@
 module IAEAPhsp
 
-include("utils.jl")
+include("constants.jl")
+include("util.jl")
 include("raw.jl")
 include("wrapper.jl")
 
