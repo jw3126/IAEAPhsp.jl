@@ -10,6 +10,7 @@ end
 
 header_path = datapath("ELDORADO_Co60_10x10_at80p5")
 
-s = Source(header_path)
+#s = Source(header_path)
 
-@time readparticles(s)
+@time readparticles(header_path)
+@time readparticles(header_path)

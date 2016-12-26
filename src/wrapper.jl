@@ -114,30 +114,18 @@ function allocate_next_particle!(s::Source)
 
 end
 function get_particle{Nf, Ni}(a::Allocator{Nf, Ni})
-    particle_type = a._type |> value |> ParticleType
-    E = a.E |> value
-    wt = a.wt |> value
-    x = a.x |> value
-    y = a.y |> value
-    z = a.z |> value
-    u = a.u |> value
-    v = a.v |> value
-    w = a.w |> value
-    extra_floats = unsafe_ntuple(Val{Nf}, a.extra_floats)
-    extra_ints = unsafe_ntuple(Val{Ni}, a.extra_ints)
-
     Particle{Nf, Ni}(
-    particle_type,
-    E,
-    wt,
-    x,
-    y,
-    z,
-    u,
-    v,
-    w,
-    extra_floats,
-    extra_ints
+    a._type |> value |> ParticleType,
+    a.E |> value,
+    a.wt |> value,
+    a.x |> value,
+    a.y |> value,
+    a.z |> value,
+    a.u |> value,
+    a.v |> value,
+    a.w |> value,
+    unsafe_ntuple(Val{Nf}, a.extra_floats),
+    unsafe_ntuple(Val{Ni}, a.extra_ints)
     )
 end
 function get_particle(s::Source)
@@ -148,11 +136,10 @@ end
 import Base: start, next, done
 start(s::Source) = nothing
 next(s::Source, state::Void) = get_particle(s), nothing
-
 done(s::Source, state::Void) = length(s) <= 0
 
 function destroy_source(s::Source)
-    result = Ref{IAEA_I32}
+    result = Ref{IAEA_I32}()
     iaea_destroy_source(s.id, result)
     value(result)
 end
@@ -168,7 +155,7 @@ end
 
 function readparticles(path)
     s = Source(path)
-    readparticles(s)
+    ret = readparticles(s)
     destroy_source(s)
     ret
 end
