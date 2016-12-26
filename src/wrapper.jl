@@ -1,5 +1,7 @@
 export Source, Particle, get_particle, ParticleType, readparticles
+
 import Base: RefValue
+
 immutable Allocator{Nf, Ni}
     n_stat::RefValue{IAEA_I32}
     _type::RefValue{IAEA_I32}
@@ -38,8 +40,6 @@ function new_source(header_path::String, id::Ref{IAEA_I32}, access=1)
     value(result)
 end
 
-
-
 immutable Source{Nf, Ni}
     header_path::String
     id::RefValue{IAEA_I32}
@@ -62,7 +62,6 @@ function get_max_particles(id, _type::Ref)
     value(n_particle)
 end
 
-
 function Source(header_path, access=1)
     id = Ref{IAEA_I32}(1)
     new_source(header_path, id, access)
@@ -74,10 +73,8 @@ function Source(header_path, access=1)
     Source{Nf, Ni}(header_path, id, access, max_particles, left_particles, allocator)
 end
 
-
-
-Base.length(s::Source) = value(s.left_particles)
 destroy(s::Source) = destroy_source(s.id)
+Base.length(s::Source) = value(s.left_particles)
 
 @enum ParticleType photon=1 electron=2 positron=3 neutron=4 proton=5
 
@@ -111,7 +108,6 @@ function allocate_next_particle!(s::Source)
     a.extra_floats,
     a.extra_ints)
     s.left_particles.x -= IAEA_I32(1)
-
 end
 function get_particle{Nf, Ni}(a::Allocator{Nf, Ni})
     Particle{Nf, Ni}(
