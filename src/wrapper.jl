@@ -1,4 +1,4 @@
-export Source, Particle, get_particle, ParticleType
+export Source, Particle, get_particle, ParticleType, readparticles
 
 immutable Source
     header_path::String
@@ -52,3 +52,14 @@ start(s::Source) = nothing
 next(s::Source, state::Void) = get_particle(s), nothing
 
 done(s::Source, state::Void) = length(s) <= 0
+
+
+function readparticles(path)
+    s = Source(path)
+    ret = Particle[]
+    for p in s
+        push!(ret, p)
+    end
+    destroy(s)
+    ret
+end
