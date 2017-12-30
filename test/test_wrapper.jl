@@ -7,10 +7,19 @@ import IAEAPhsp: allocate_next_particle!, value, ParticleType, Allocator, _get_p
 
 end
 
-
-header_path = datapath("ELDORADO_Co60_10x10_at80p5")
-
-s = Source(header_path)
-
-@time readparticles(header_path)
-@time readparticles(header_path)
+@testset "destroy" begin
+    path = datapath("waterbox")
+    
+    s = Source(path)
+    n = length(s)
+    @test n > 0
+    particles = @inferred collect(s)
+    @test n == length(particles)
+    @test !isempty(particles)
+    @test length(s) == 0
+    @test isempty(collect(s))
+    destroy(s)
+    @test_throws ArgumentError destroy(s)
+    s = Source(path)
+    @test particles == collect(s)
+end

@@ -1,12 +1,13 @@
-export Source, Particle, get_particle, ParticleType, readparticles
+using ArgCheck
+export Source, Particle, get_particle, ParticleType, destroy, isalive
 
 import Base: RefValue
 
-function new_source(header_path::String, id::Ref{IAEA_I32}, access=1)
-    header_file = header_path.data |> pointer |> Cstring #Ref(header_path.data)
+function new_source(path::String, id::Ref{IAEA_I32}, access=1)
+    header_file = path |> Vector{UInt8} |> pointer |> Cstring
     result = Ref{IAEA_I32}()
-    hf_length = header_path.data |> sizeof |> Cint
-    iaea_new_source(id, header_path, Ref(IAEA_I32(access)), result, hf_length)
+    hf_length = path |> Vector{UInt8} |> sizeof |> Cint
+    iaea_new_source(id, path, Ref(IAEA_I32(access)), result, hf_length)
     value(result)
 end
 function get_extra_numbers(id)
@@ -22,9 +23,8 @@ function get_max_particles(id, _type::Ref)
 end
 
 # talking to iaea library is via C functions, whose arguments
-# are lots of pointers to numbers. Allocating them for each ccall
-# is expensive, hence we allocate memory once with this Allocator type
-immutable Allocator{Nf, Ni}
+# are lots of pointers to numbers. We allocate memory once with this Allocator type
+struct Allocator{Nf, Ni}
     n_stat::RefValue{IAEA_I32}
     _type::RefValue{IAEA_I32}
     E::RefValue{IAEA_Float}
@@ -37,7 +37,7 @@ immutable Allocator{Nf, Ni}
     w::RefValue{IAEA_Float}
     extra_floats::Vector{IAEA_Float}
     extra_ints::Vector{IAEA_I32}
-    function Allocator()
+    function Allocator{Nf, Ni}() where {Nf, Ni}
         new(Ref{IAEA_I32}(1),
         Ref{IAEA_I32}(),
         Ref{IAEA_Float}(),
@@ -55,32 +55,35 @@ immutable Allocator{Nf, Ni}
 end
 
 
-immutable Source{Nf, Ni}
-    header_path::String
+struct Source{Nf, Ni}
+    path::String
     id::RefValue{IAEA_I32}
     access::IAEA_I32
     max_particles::Int64
     left_particles::RefValue{Int64}
     allocator::Allocator{Nf, Ni}
-
+    alive::RefValue{Bool}
 end
 
-function Source(header_path, access=1)
+function Source(path, access=1)
+    @argcheck ispath(path*".IAEAheader")
+    @argcheck ispath(path*".IAEAphsp")
+
     id = Ref{IAEA_I32}(1)
-    new_source(header_path, id, access)
+    new_source(path, id, access)
     type_all = Ref{IAEA_I32}(-1)
     max_particles = get_max_particles(id, type_all)
     left_particles = Ref(max_particles)
     Nf, Ni = get_extra_numbers(id)
     allocator = Allocator{Nf, Ni}()
-    Source{Nf, Ni}(header_path, id, access, max_particles, left_particles, allocator)
+    alive = Ref(true)
+    Source{Nf, Ni}(path, id, access, max_particles, left_particles, allocator, alive)
 end
-
-destroy(s::Source) = destroy_source(s.id)
+isalive(s::Source) = s.alive[]
 
 @enum ParticleType photon=1 electron=2 positron=3 neutron=4 proton=5
 
-immutable Particle{Nf, Ni}
+struct Particle{Nf, Ni}
     particle_type::ParticleType
     E::IAEA_Float
     wt::IAEA_Float
@@ -101,6 +104,7 @@ for pt in instances(ParticleType)
 end
 
 function allocate_next_particle!(s::Source)
+    @argcheck isalive(s)
     a = s.allocator
     #iaea_get_particle(id,n_stat,_type,E,wt,x,y,z,u,v,w,extra_floats,extra_ints)
     iaea_get_particle(s.id,a.n_stat,a._type,
@@ -132,35 +136,26 @@ function get_particle(s::Source)
 end
 
 import Base: start, next, done, length, eltype
+
 start(s::Source) = nothing
 next(s::Source, state::Void) = get_particle(s), nothing
 done(s::Source, state::Void) = length(s) <= 0
 length(s::Source) = value(s.left_particles)
-eltype{Nf, Ni}(s::Source{Nf, Ni}) = Particle{Nf, Ni}
+eltype(s::Source{Nf, Ni}) where {Nf, Ni} = Particle{Nf, Ni}
 
-function destroy_source(s::Source)
+function destroy(s::Source)
+    @argcheck isalive(s)
+    s.alive[] = false
     result = Ref{IAEA_I32}()
     iaea_destroy_source(s.id, result)
     value(result)
 end
 
-# @noinline readparticles(s::Source) = collect(s)
-@noinline function readparticles(s::Source)
-    # this is much faster then collect in 0.5, not sure why
+function Base.collect(s::Source)
     ret = eltype(s)[]
     sizehint!(ret, length(s))
     for p in s
         push!(ret, p)
     end
-    ret
-end
-
-
-
-
-function readparticles(path)
-    s = Source(path)
-    ret = readparticles(s)
-    destroy_source(s)
     ret
 end
